@@ -71,7 +71,7 @@ export default function ExamCreatePage() {
   const [examType, setExamType] = useState<ExamType>('aptitude');
   const [questions, setQuestions] = useState<Question[]>([]);
   const [questionBanks, setQuestionBanks] = useState<QuestionBank[]>([]);
-  const [selectedBankId, setSelectedBankId] = useState<string | null>(null);
+  const [selectedBankIds, setSelectedBankIds] = useState<string[]>([]);
   const [bankQuestions, setBankQuestions] = useState<BankQuestion[]>([]);
 
   const [formData, setFormData] = useState({
@@ -104,20 +104,25 @@ export default function ExamCreatePage() {
     loadQuestionBanks();
   }, []);
 
-  const loadBankQuestions = async (bankId: string) => {
+  const loadMultipleBankQuestions = async (bankIds: string[]) => {
     try {
-      const { data } = await api.get<BankQuestion[]>(
-        `/questions/bank/${bankId}`
+      const results = await Promise.all(
+        bankIds.map(id =>
+          api.get<BankQuestion[]>(`/questions/bank/${id}`)
+        )
       );
-      console.log("Bank Questions:", data);
-      setBankQuestions(data);
+
+      const merged: BankQuestion[] = results.flatMap(r => r.data);
+
+      setBankQuestions(merged);
     } catch (error) {
       console.error(error);
     }
-  };;
+  };
+
 
   const handleSave = async () => {
-    if (!selectedBankId) {
+    if (!selectedBankIds) {
       toast({
         title: "Question Bank Required",
         description: "Please select a question bank",
@@ -136,7 +141,7 @@ export default function ExamCreatePage() {
       themeColor: formData.themeColor,
 
       // 🔥 FORCE ADD
-      questionBanks: [selectedBankId],
+      questionBanks: selectedBankIds,
 
       settings: {
         shuffleQuestions: formData.shuffleQuestions,
@@ -470,25 +475,28 @@ export default function ExamCreatePage() {
 
             <CardContent className="space-y-6">
               {/* BANK SELECT */}
-              <Select
-                value={selectedBankId ?? ""}
-                onValueChange={(value) => {
-                  setSelectedBankId(value);
-                  loadBankQuestions(value);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select Question Bank" />
-                </SelectTrigger>
+              <div className="space-y-3">
+                {questionBanks.map((bank) => (
+                  <label
+                    key={bank._id}
+                    className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-muted"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedBankIds.includes(bank._id)}
+                      onChange={(e) => {
+                        const updated = e.target.checked
+                          ? [...selectedBankIds, bank._id]
+                          : selectedBankIds.filter(id => id !== bank._id);
 
-                <SelectContent>
-                  {questionBanks.map((bank) => (
-                    <SelectItem key={bank._id} value={bank._id}>
-                      {bank.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                        setSelectedBankIds(updated);
+                        loadMultipleBankQuestions(updated);
+                      }}
+                    />
+                    <span className="font-medium">{bank.name}</span>
+                  </label>
+                ))}
+              </div>
 
               {/* QUESTIONS TABLE */}
               {bankQuestions.length > 0 ? (
@@ -515,7 +523,7 @@ export default function ExamCreatePage() {
                   </table>
                 </div>
               ) : (
-                selectedBankId && (
+                selectedBankIds.length === 0 && (
                   <p className="text-muted-foreground text-sm">
                     No questions found in this bank
                   </p>

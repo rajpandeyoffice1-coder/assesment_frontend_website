@@ -17,6 +17,7 @@ export type RegisterResponse = {
 
 const api = axios.create({
   baseURL: "https://assesment-backend-jyvd.onrender.com/api",
+  // baseURL: "http://localhost:5000/api/",
   headers: {
     "Content-Type": "application/json",
   },

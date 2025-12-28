@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Modal } from '@/components/ui/Modal';
+import { Modal } from '@/components/modals/Modal';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   DropdownMenu,
@@ -14,7 +14,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useNavigate } from 'react-router-dom';
-import { fetchExams, fetchExamById, updateExam, deleteExam, Exam } from '@/api/exams';
+import { fetchExams, updateExam, deleteExam } from '@/api/exams';
+import api from '@/lib/axios';
+
 export type Exams = {
   _id: string;
   title: string;
@@ -26,9 +28,7 @@ export type Exams = {
   totalQuestions: number;
   themeColor: string;
   attempts: number;
-
-  questionBanks?: ExamQuestionBank[]; // ✅ FIXED
-
+  questionBanks?: ExamQuestionBank[];
   settings: {
     shuffleQuestions: boolean;
     negativeMarking: boolean;
@@ -36,6 +36,17 @@ export type Exams = {
     autoSubmit: boolean;
   };
 };
+
+type ExamQuestionResponse = {
+  examId: string;
+  title: string;
+  code: string;
+  type: "behavioral" | "aptitude" | "knowledge" | "intelligence";
+  duration: number;
+  totalQuestions: number;
+  questions: ExamQuestion[];
+};
+
 const typeColors = {
   behavioral: { bg: 'bg-accent/20', text: 'text-accent', label: 'Behavioral' },
   aptitude: { bg: 'bg-primary/20', text: 'text-primary', label: 'Aptitude' },
@@ -88,6 +99,25 @@ export default function ExamsPage() {
     return matchesSearch && matchesTab;
   });
 
+  const openExamModal = async (exam: Exams) => {
+    const res = await api.get<ExamQuestionResponse>(
+      `/exams/${exam._id}/questions`
+    );
+
+    setSelectedExam({
+      ...exam,
+      questionBanks: [
+        {
+          _id: "generated",
+          name: "Selected Questions",
+          questions: res.data.questions
+        }
+      ]
+    });
+
+    setOpenModal(true);
+  };
+
   return (
     <AdminLayout title="Exams" subtitle="Create and manage assessments for all exam types">
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
@@ -128,11 +158,7 @@ export default function ExamsPage() {
             key={exam._id}
             variant="glass"
             className="p-6 hover-lift cursor-pointer"
-            onClick={async () => {
-              const data = await fetchExamById(exam._id);
-              setSelectedExam(data);
-              setOpenModal(true);
-            }}
+            onClick={() => openExamModal(exam)}
           >
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-2">
@@ -224,13 +250,13 @@ export default function ExamsPage() {
           </Card>
         ))}
       </div>
+
       {openModal && selectedExam && (
         <Modal
           open={openModal}
           onClose={() => setOpenModal(false)}
           title={selectedExam.title}
         >
-          {/* EXAM INFO */}
           <div className="grid grid-cols-2 gap-4 mb-6 text-sm">
             <div><b>Code:</b> {selectedExam.code}</div>
             <div><b>Type:</b> {selectedExam.type}</div>
@@ -239,9 +265,8 @@ export default function ExamsPage() {
             <div><b>Status:</b> {selectedExam.status}</div>
           </div>
 
-          {/* QUESTION BANKS */}
           <div className="space-y-6">
-            {selectedExam.questionBanks?.map((bank, i) => (
+            {selectedExam.questionBanks?.map((bank) => (
               <div key={bank._id} className="border rounded-xl overflow-hidden">
                 <div className="px-4 py-3 bg-muted font-semibold">
                   {bank.name}

@@ -6,7 +6,6 @@ import {
   ChevronRight,
   Flag,
   Send,
-  AlertTriangle,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -40,10 +39,9 @@ type Question = {
   _id: string;
   question_text: string;
   question_type: "mcq" | "behavioral";
+  qb_type: "behavioral" | "aptitude" | "knowledge" | "intelligence";
   options?: MCQOption[];
   scale?: ScaleOption[];
-  maxScale?: number;
-  isReverse?: boolean;
 };
 
 type ExamData = {
@@ -67,20 +65,18 @@ type ApiResponse<T> = {
 };
 
 export default function ExamPage() {
-  const { assignmentId } = useParams<{ assignmentId: string }>();
+  const { assignmentId } = useParams();
   const navigate = useNavigate();
 
   const [data, setData] = useState<ExamData | null>(null);
   const [current, setCurrent] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, number | string>>({});
+  const [answers, setAnswers] = useState<Record<string, string | number>>({});
   const [flagged, setFlagged] = useState<Set<string>>(new Set());
   const [timeLeft, setTimeLeft] = useState(0);
 
   const candidateId = (() => {
     try {
-      const raw = localStorage.getItem("candidate_profile");
-      if (!raw) return null;
-      return JSON.parse(raw)._id;
+      return JSON.parse(localStorage.getItem("candidate_profile") || "")._id;
     } catch {
       return null;
     }
@@ -98,7 +94,7 @@ export default function ExamPage() {
         setTimeLeft(res.data.data.exam.duration * 60);
       });
   }, [assignmentId, candidateId]);
-  
+
   useEffect(() => {
     if (!data) return;
 
@@ -116,124 +112,141 @@ export default function ExamPage() {
     return () => clearInterval(timer);
   }, [data]);
 
-  const saveAnswer = (qid: string, value: number | string) => {
-    setAnswers((p) => ({ ...p, [qid]: value }));
+  const saveAnswer = (qid: string, value: string | number) => {
+    setAnswers((prev) => ({ ...prev, [qid]: value }));
   };
 
   const submitExam = async () => {
     const attemptId = localStorage.getItem("exam_attempt_id");
     if (!attemptId) return;
 
-    await api.post(`/candidate/exam/${attemptId}/submit`, { answers });
+    const responses = Object.entries(answers).map(([questionId, answer]) => ({
+      question_id: questionId,
+      answer,
+    }));
+
+    await api.post(`/candidate/exam/${attemptId}/submit`, { responses });
     navigate("/candidate/results");
   };
 
-  const question = data?.questions[current];
+  const questions = data?.questions || [];
+  const question = questions[current];
 
   const progress = useMemo(() => {
-    if (!data) return 0;
-    return ((current + 1) / data.questions.length) * 100;
-  }, [current, data]);
-
-  const answeredCount = Object.keys(answers).length;
-  const lowTime = timeLeft < 300;
+    if (!questions.length) return 0;
+    return (Object.keys(answers).length / questions.length) * 100;
+  }, [answers, questions]);
 
   const formatTime = (s: number) =>
-    `${Math.floor(s / 60)
-      .toString()
-      .padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
+    `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(
+      2,
+      "0"
+    )}`;
 
   if (!data || !question) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">
-        Loading exam…
+      <div className="min-h-screen flex items-center justify-center text-muted-foreground">
+        Loading exam...
       </div>
     );
   }
 
+  const sectionLabel =
+    question.qb_type === "behavioral"
+      ? "Behavioral Section"
+      : question.qb_type === "intelligence"
+        ? "Intelligence Section"
+        : question.qb_type === "knowledge"
+          ? "Knowledge Section"
+          : "Aptitude Section";
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="sticky top-0 z-50 border-b bg-white">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="flex h-14 items-center justify-between">
-            <Logo size="sm" />
-            <div className="flex items-center gap-4">
-              <div className="hidden md:flex items-center gap-2">
-                <Progress value={progress} className="w-28 h-1.5" />
-                <span className="text-xs text-muted-foreground">
-                  {answeredCount}/{data.questions.length}
-                </span>
-              </div>
-              <div
-                className={cn(
-                  "px-3 py-1 rounded-md text-xs font-mono",
-                  lowTime ? "bg-red-100 text-red-600" : "bg-muted"
-                )}
-              >
-                <Clock className="inline w-3.5 h-3.5 mr-1" />
-                {formatTime(timeLeft)}
-              </div>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button size="sm">
-                    <Send className="w-4 h-4 mr-1" />
-                    Submit
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Submit Exam</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Answered {answeredCount} of {data.questions.length}
-                      {answeredCount < data.questions.length && (
-                        <span className="block text-yellow-600 text-xs mt-2">
-                          <AlertTriangle className="inline w-3.5 h-3.5 mr-1" />
-                          Unanswered questions remain
-                        </span>
-                      )}
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Continue</AlertDialogCancel>
-                    <AlertDialogAction onClick={submitExam}>
-                      Submit
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+      <header className="sticky top-0 z-50 bg-white border-b">
+        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
+          <Logo size="sm" />
+
+          <div className="flex items-center gap-4">
+            <Progress value={progress} className="w-32" />
+            <span className="text-xs text-muted-foreground">
+              {Object.keys(answers).length}/{questions.length}
+            </span>
+
+            <div
+              className={cn(
+                "px-3 py-1 rounded text-xs",
+                timeLeft < 300 ? "bg-red-100 text-red-600" : "bg-muted"
+              )}
+            >
+              <Clock className="inline w-4 h-4 mr-1" />
+              {formatTime(timeLeft)}
             </div>
+
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button size="sm">
+                  <Send className="w-4 h-4 mr-1" />
+                  Submit
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Submit Exam</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    You answered {Object.keys(answers).length} of{" "}
+                    {questions.length}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Continue</AlertDialogCancel>
+                  <AlertDialogAction
+                    disabled={Object.keys(answers).length === 0}
+                    onClick={submitExam}
+                  >
+                    Submit
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-4 py-6 grid lg:grid-cols-4 gap-6">
+      <div className="max-w-6xl mx-auto grid lg:grid-cols-4 gap-6 p-6">
         <div className="lg:col-span-3">
           <Card className="p-6">
-            <div className="flex justify-between items-center mb-4">
-              <span className="text-xs text-muted-foreground">
-                Question {current + 1} of {data.questions.length}
+            <div className="mb-3 text-xs font-semibold text-primary uppercase">
+              {sectionLabel}
+            </div>
+
+            <div className="flex justify-between mb-4">
+              <span className="text-sm">
+                Question {current + 1} of {questions.length}
               </span>
+
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() =>
-                  setFlagged((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(question._id)) {
-                      next.delete(question._id);
+                  setFlagged(prev => {
+                    const s = new Set(prev);
+
+                    if (s.has(question._id)) {
+                      s.delete(question._id);
                     } else {
-                      next.add(question._id);
+                      s.add(question._id);
                     }
-                    return next;
+
+                    return s;
                   })
                 }
               >
-                <Flag className="w-3.5 h-3.5 mr-1" />
+                <Flag className="w-4 h-4 mr-1" />
                 {flagged.has(question._id) ? "Flagged" : "Flag"}
               </Button>
             </div>
 
-            <h2 className="text-lg font-medium mb-6 leading-relaxed">
+            <h2 className="text-lg font-medium mb-6">
               {question.question_text}
             </h2>
 
@@ -244,39 +257,32 @@ export default function ExamPage() {
                     key={o.key}
                     onClick={() => saveAnswer(question._id, o.key)}
                     className={cn(
-                      "w-full px-4 py-3 rounded-md border flex gap-3 text-sm text-left",
+                      "w-full p-3 border rounded flex gap-3",
                       answers[question._id] === o.key
                         ? "border-primary bg-primary/5"
-                        : "border-border hover:bg-muted"
+                        : "hover:bg-muted"
                     )}
                   >
-                    <span
-                      className={cn(
-                        "w-7 h-7 rounded-full flex items-center justify-center text-xs",
-                        answers[question._id] === o.key
-                          ? "bg-primary text-white"
-                          : "border"
-                      )}
-                    >
+                    <span className="w-6 h-6 flex items-center justify-center border rounded-full">
                       {String.fromCharCode(65 + i)}
                     </span>
-                    <span>{o.text}</span>
+                    {o.text}
                   </button>
                 ))}
               </div>
             )}
 
             {question.question_type === "behavioral" && (
-              <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+              <div className="grid grid-cols-5 gap-3">
                 {question.scale?.map((s) => (
                   <button
                     key={s.value}
                     onClick={() => saveAnswer(question._id, s.value)}
                     className={cn(
-                      "px-3 py-3 rounded-md border text-xs text-center",
+                      "p-3 border rounded text-xs",
                       answers[question._id] === s.value
-                        ? "bg-primary text-white border-primary"
-                        : "border-border hover:bg-muted"
+                        ? "bg-primary text-white"
+                        : "hover:bg-muted"
                     )}
                   >
                     {s.label}
@@ -287,18 +293,17 @@ export default function ExamPage() {
 
             <div className="flex justify-between mt-6 pt-4 border-t">
               <Button
-                size="sm"
                 variant="outline"
                 disabled={current === 0}
-                onClick={() => setCurrent((c) => c - 1)}
+                onClick={() => setCurrent(c => c - 1)}
               >
                 <ChevronLeft className="w-4 h-4 mr-1" />
                 Previous
               </Button>
+
               <Button
-                size="sm"
-                disabled={current === data.questions.length - 1}
-                onClick={() => setCurrent((c) => c + 1)}
+                disabled={current === questions.length - 1}
+                onClick={() => setCurrent(c => c + 1)}
               >
                 Next
                 <ChevronRight className="w-4 h-4 ml-1" />
@@ -307,30 +312,33 @@ export default function ExamPage() {
           </Card>
         </div>
 
-        <div>
-          <Card className="p-4 sticky top-20">
-            <h3 className="text-sm font-medium mb-3">Questions</h3>
-            <div className="grid grid-cols-5 gap-2">
-              {data.questions.map((q, i) => (
+        <Card className="p-4 sticky top-20">
+          <h3 className="text-sm font-medium mb-3">Questions</h3>
+          <div className="grid grid-cols-5 gap-2">
+            {questions.map((q, i) => {
+              const isAnswered = answers[q._id] !== undefined;
+              const isFlagged = flagged.has(q._id);
+
+              return (
                 <button
                   key={q._id}
                   onClick={() => setCurrent(i)}
                   className={cn(
-                    "w-8 h-8 rounded text-xs",
+                    "w-8 h-8 text-xs rounded",
                     current === i && "ring-2 ring-primary",
-                    answers[q._id]
+                    isAnswered
                       ? "bg-green-500 text-white"
-                      : flagged.has(q._id)
+                      : isFlagged
                         ? "bg-yellow-400 text-white"
                         : "bg-muted"
                   )}
                 >
                   {i + 1}
                 </button>
-              ))}
-            </div>
-          </Card>
-        </div>
+              );
+            })}
+          </div>
+        </Card>
       </div>
     </div>
   );
