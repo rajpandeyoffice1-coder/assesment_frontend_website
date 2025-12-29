@@ -33,7 +33,7 @@ export function Logo({ size = "md", showText = true }: LogoProps) {
           <span
             className={`${textSizes[size]} font-display font-bold text-gradient-primary`}
           >
-            Assesment Exam
+            ExamExpress
           </span>
           {size === "lg" && (
             <span className="text-xs text-muted-foreground font-medium tracking-wide">
