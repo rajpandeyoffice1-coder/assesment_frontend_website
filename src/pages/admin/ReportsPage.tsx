@@ -1,17 +1,19 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Download, Filter, BarChart2, Users, FileText, TrendingUp } from 'lucide-react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
+import api from '@/lib/axios';
+
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
   ResponsiveContainer,
   LineChart,
   Line,
@@ -20,50 +22,123 @@ import {
   Cell,
 } from 'recharts';
 
-const examPerformance = [
-  { name: 'Aptitude Test A', avgScore: 72, participants: 234 },
-  { name: 'Behavioral', avgScore: 78, participants: 189 },
-  { name: 'Knowledge Test', avgScore: 65, participants: 156 },
-  { name: 'Intelligence', avgScore: 82, participants: 98 },
-];
+/* ================= TYPES ================= */
 
-const monthlyTrend = [
-  { month: 'Jan', candidates: 120, exams: 45, avgScore: 72 },
-  { month: 'Feb', candidates: 145, exams: 52, avgScore: 75 },
-  { month: 'Mar', candidates: 168, exams: 58, avgScore: 78 },
-  { month: 'Apr', candidates: 190, exams: 65, avgScore: 76 },
-  { month: 'May', candidates: 210, exams: 72, avgScore: 80 },
-  { month: 'Jun', candidates: 245, exams: 85, avgScore: 82 },
-];
+type Stats = {
+  totalCandidates: number;
+  examsCompleted: number;
+  avgScore: number;
+  passRate: number;
+};
 
-const groupPerformance = [
-  { name: 'Engineering Batch', value: 82, color: '#6366f1' },
-  { name: 'Management Trainees', value: 78, color: '#10b981' },
-  { name: 'Sales Team', value: 75, color: '#f59e0b' },
-  { name: 'Customer Support', value: 72, color: '#ec4899' },
-];
+type ExamPerformance = {
+  name: string;
+  participants: number;
+  avgScore: number;
+};
 
-const topPerformers = [
-  { name: 'Sarah Johnson', email: 'sarah@example.com', avgScore: 94, examsCompleted: 5 },
-  { name: 'Michael Chen', email: 'michael@example.com', avgScore: 92, examsCompleted: 4 },
-  { name: 'Emily Davis', email: 'emily@example.com', avgScore: 89, examsCompleted: 6 },
-  { name: 'James Wilson', email: 'james@example.com', avgScore: 87, examsCompleted: 4 },
-  { name: 'Lisa Anderson', email: 'lisa@example.com', avgScore: 85, examsCompleted: 5 },
-];
+type MonthlyTrend = {
+  month: number;
+  candidates: number;
+  avgScore: number;
+};
+
+type GroupPerformance = {
+  name: string;
+  value: number;
+  color: string;
+};
+
+type TopPerformer = {
+  name: string;
+  email: string;
+  avgScore: number;
+  examsCompleted: number;
+};
+
+type AnalyticsData = {
+  stats: Stats;
+  examPerformance: ExamPerformance[];
+  monthlyTrend: MonthlyTrend[];
+  groupPerformance: GroupPerformance[];
+  topPerformers: TopPerformer[];
+  candidateResults: CandidateResult[];
+};
+
+type CandidateResult = {
+  candidateId: string;
+  name: string;
+  email: string;
+  group: string;
+  examName: string;
+  percentage: number;
+};
+
+const monthMap = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/* ================= COMPONENT ================= */
 
 export default function ReportsPage() {
-  const [dateRange, setDateRange] = useState('last30');
+  const [dateRange, setDateRange] = useState<'last7' | 'last30' | 'last90' | 'all'>('last30');
+  const [data, setData] = useState<AnalyticsData | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const res = await api.get<{ success: boolean; data: AnalyticsData }>(
+          `/admin/result-analytics?range=${dateRange}`
+        );
+        setData(res.data.data);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [dateRange]);
+
+  if (loading) {
+    return (
+      <AdminLayout title="Reports & Analytics">
+        <div className="flex justify-center items-center h-64">
+          <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  if (!data) return null;
+
+  const {
+    stats,
+    examPerformance,
+    monthlyTrend,
+    groupPerformance,
+    topPerformers,
+    candidateResults,
+  } = data;
+
+  const formattedMonthly = monthlyTrend.map(m => ({
+    month: monthMap[m.month - 1],
+    candidates: m.candidates,
+    avgScore: m.avgScore,
+  }));
+
+  const sortedPerformers = [...topPerformers].sort(
+    (a, b) => b.avgScore - a.avgScore
+  );
 
   return (
-    <AdminLayout 
-      title="Reports & Analytics" 
-      subtitle="Comprehensive insights into assessment performance"
-    >
+    <AdminLayout title="Reports & Analytics" subtitle="Comprehensive insights into assessment performance">
+
+      {/* HEADER */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
-          <Select value={dateRange} onValueChange={setDateRange}>
+          <Select value={dateRange} onValueChange={v => setDateRange(v as any)}>
             <SelectTrigger className="w-40">
-              <SelectValue placeholder="Select range" />
+              <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="last7">Last 7 days</SelectItem>
@@ -83,188 +158,184 @@ export default function ReportsPage() {
         </Button>
       </div>
 
-      {/* Quick Stats */}
+      {/* STATS */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <Card variant="glass" className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
-              <Users className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Total Candidates</p>
-              <p className="text-2xl font-bold text-foreground">2,847</p>
-            </div>
-          </div>
-        </Card>
-        <Card variant="glass" className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-success/20 flex items-center justify-center">
-              <FileText className="w-5 h-5 text-success" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Exams Completed</p>
-              <p className="text-2xl font-bold text-foreground">1,892</p>
-            </div>
-          </div>
-        </Card>
-        <Card variant="glass" className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-warning/20 flex items-center justify-center">
-              <BarChart2 className="w-5 h-5 text-warning" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Average Score</p>
-              <p className="text-2xl font-bold text-foreground">76%</p>
-            </div>
-          </div>
-        </Card>
-        <Card variant="glass" className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-accent" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Pass Rate</p>
-              <p className="text-2xl font-bold text-foreground">84%</p>
-            </div>
-          </div>
-        </Card>
+        <Stat icon={<Users />} label="Total Candidates" value={stats.totalCandidates} />
+        <Stat icon={<FileText />} label="Exams Completed" value={stats.examsCompleted} />
+        <Stat icon={<BarChart2 />} label="Average Score" value={`${stats.avgScore}%`} />
+        <Stat icon={<TrendingUp />} label="Pass Rate" value={`${stats.passRate}%`} />
       </div>
 
       <Tabs defaultValue="overview" className="space-y-6">
+
         <TabsList className="bg-muted/50 p-1">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="exams">By Exam</TabsTrigger>
           <TabsTrigger value="groups">By Group</TabsTrigger>
           <TabsTrigger value="candidates">Top Performers</TabsTrigger>
+          <TabsTrigger value="candidates-results">Candidate Results</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="space-y-6 animate-fade-in">
+        {/* OVERVIEW */}
+        <TabsContent value="overview">
           <Card variant="glass">
-            <CardHeader>
-              <CardTitle>Monthly Trend</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle>Monthly Trend</CardTitle></CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={monthlyTrend}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(230, 20%, 90%)" />
-                  <XAxis dataKey="month" stroke="hsl(230, 15%, 45%)" fontSize={12} />
-                  <YAxis stroke="hsl(230, 15%, 45%)" fontSize={12} />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(0, 0%, 100%)', 
-                      border: '1px solid hsl(230, 20%, 90%)',
-                      borderRadius: '12px',
-                    }} 
-                  />
-                  <Line type="monotone" dataKey="candidates" stroke="hsl(245, 82%, 60%)" strokeWidth={3} dot={{ fill: 'hsl(245, 82%, 60%)' }} />
-                  <Line type="monotone" dataKey="avgScore" stroke="hsl(162, 72%, 45%)" strokeWidth={3} dot={{ fill: 'hsl(162, 72%, 45%)' }} />
+                <LineChart data={formattedMonthly}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip />
+                  <Line dataKey="candidates" stroke="#6366f1" strokeWidth={3} />
+                  <Line dataKey="avgScore" stroke="#10b981" strokeWidth={3} />
                 </LineChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="exams" className="animate-fade-in">
+        {/* EXAMS */}
+        <TabsContent value="exams">
           <Card variant="glass">
-            <CardHeader>
-              <CardTitle>Exam Performance Comparison</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle>Exam Performance</CardTitle></CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={examPerformance}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(230, 20%, 90%)" />
-                  <XAxis dataKey="name" stroke="hsl(230, 15%, 45%)" fontSize={12} />
-                  <YAxis stroke="hsl(230, 15%, 45%)" fontSize={12} />
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
                   <Tooltip />
-                  <Bar dataKey="avgScore" fill="hsl(245, 82%, 60%)" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="avgScore" fill="#6366f1" radius={[8, 8, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="groups" className="animate-fade-in">
+        {/* GROUPS */}
+        <TabsContent value="groups">
           <Card variant="glass">
-            <CardHeader>
-              <CardTitle>Group Performance</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={groupPerformance}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={100}
-                      paddingAngle={5}
-                      dataKey="value"
-                    >
-                      {groupPerformance.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="space-y-4">
-                  {groupPerformance.map((group) => (
-                    <div key={group.name} className="flex items-center justify-between p-4 rounded-xl bg-muted/50">
-                      <div className="flex items-center gap-3">
-                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: group.color }} />
-                        <span className="font-medium">{group.name}</span>
-                      </div>
-                      <span className="text-lg font-bold">{group.value}%</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+            <CardHeader><CardTitle>Group Performance</CardTitle></CardHeader>
+            <CardContent className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie data={groupPerformance} dataKey="value" innerRadius={60} outerRadius={100}>
+                    {groupPerformance.map((g, i) => (
+                      <Cell key={i} fill={g.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
 
-        <TabsContent value="candidates" className="animate-fade-in">
-          <Card variant="glass">
-            <CardHeader>
-              <CardTitle>Top Performers</CardTitle>
-            </CardHeader>
-            <CardContent>
               <div className="space-y-4">
-                {topPerformers.map((performer, index) => (
-                  <div key={performer.email} className="flex items-center justify-between p-4 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors">
-                    <div className="flex items-center gap-4">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white ${
-                        index === 0 ? 'bg-gradient-stat-orange' : 
-                        index === 1 ? 'bg-gradient-stat-purple' : 
-                        index === 2 ? 'bg-gradient-stat-green' : 
-                        'bg-gradient-stat-blue'
-                      }`}>
-                        {index + 1}
-                      </div>
-                      <div>
-                        <p className="font-medium text-foreground">{performer.name}</p>
-                        <p className="text-sm text-muted-foreground">{performer.email}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-6">
-                      <div className="text-center">
-                        <p className="text-sm text-muted-foreground">Avg Score</p>
-                        <p className="font-bold text-success">{performer.avgScore}%</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-sm text-muted-foreground">Exams</p>
-                        <p className="font-bold text-foreground">{performer.examsCompleted}</p>
-                      </div>
-                    </div>
+                {groupPerformance.map(g => (
+                  <div key={g.name} className="flex justify-between p-4 bg-muted/50 rounded-xl">
+                    <span className="font-medium">{g.name}</span>
+                    <span className="text-lg font-bold">{g.value}%</span>
                   </div>
                 ))}
               </div>
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* TOP PERFORMERS */}
+        <TabsContent value="candidates">
+          <Card variant="glass">
+            <CardHeader><CardTitle>Top Performers</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              {sortedPerformers.map((p, i) => (
+                <div key={p.email} className="flex justify-between p-4 rounded-xl bg-muted/30">
+                  <div>
+                    <p className="font-medium">{p.name}</p>
+                    <p className="text-sm text-muted-foreground">{p.email}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-success">{p.avgScore}%</p>
+                    <p className="text-sm">Exams: {p.examsCompleted}</p>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Candidate Wise Result */}
+
+        <TabsContent value="candidates-results" className="animate-fade-in">
+          <Card variant="glass">
+            <CardHeader>
+              <CardTitle>Candidate-wise Results</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {candidateResults.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center">
+                  No candidate results available
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-muted-foreground">
+                        <th className="text-left py-2 px-3">Candidate</th>
+                        <th className="text-left py-2 px-3">Email</th>
+                        <th className="text-left py-2 px-3">Group</th>
+                        <th className="text-left py-2 px-3">Exam</th>
+                        <th className="text-right py-2 px-3">Score</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {candidateResults.map((c) => (
+                        <tr
+                          key={`${c.candidateId}-${c.examName}`}
+                          className="border-b hover:bg-muted/30 transition"
+                        >
+                          <td className="py-2 px-3 font-medium">{c.name}</td>
+                          <td className="py-2 px-3 text-muted-foreground">{c.email}</td>
+                          <td className="py-2 px-3">{c.group}</td>
+                          <td className="py-2 px-3">{c.examName}</td>
+                          <td className="py-2 px-3 text-right font-bold text-success">
+                            {c.percentage}%
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
       </Tabs>
     </AdminLayout>
+  );
+}
+
+/* ================= STAT CARD ================= */
+
+function Stat({
+  icon,
+  label,
+  value,
+}: {
+  icon: JSX.Element;
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <Card variant="glass" className="p-4">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
+          {icon}
+        </div>
+        <div>
+          <p className="text-sm text-muted-foreground">{label}</p>
+          <p className="text-2xl font-bold">{value}</p>
+        </div>
+      </div>
+    </Card>
   );
 }
